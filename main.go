@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,7 +23,9 @@ func main() {
 			os.Exit(0)
 		}
 	}
-	fmt.Println("Logs folder found")
+	fmt.Println()
+	fmt.Println(">> Automatic DownloadLink Creator from BsgLauncher Logs <<")
+	fmt.Println("Created by TheMaoci; Rewritten by King")
 
 	logFiles, err := os.ReadDir(logDirectory)
 	if err != nil {
@@ -33,45 +34,54 @@ func main() {
 		os.Exit(0)
 	}
 
+	var fileName, filePath string
+	var start, end int
+
+	var clientInfo, URL, GUID, Version string
+	var versionSplit, guidSplit, splitClientInfo []string
+
+	fmt.Println("--------------------")
+	fmt.Println("Detected 'Game Versions' on your machine:")
+	fmt.Println()
+
 	for _, file := range logFiles {
-		fileName := file.Name()
+		fileName = file.Name()
 
 		if !strings.Contains(fileName, "BSG_Launcher_") {
 			continue
 		}
-		filePath := filepath.Join(logDirectory, fileName)
+		filePath = filepath.Join(logDirectory, fileName)
 
 		data, err := readLines(filePath)
 		if err != nil {
 			fmt.Println(err)
-			fmt.Println("Error in splitting file into []string, exiting")
+			fmt.Println("Error in splitting file into []string, exiting!")
 			os.Exit(0)
 		}
 
 		for _, line := range data {
 			if strings.Contains(line, "Starting download") {
 
-				var start int = strings.Index(line, "/client")
-				var end int
+				start = strings.Index(line, "/client")
 
 				if strings.Contains(line, ".update") {
 					end = strings.Index(line, ".update")
 				} else if strings.Contains(line, ".zip") {
 					end = strings.Index(line, ".zip")
 				} else {
-					log.Fatalln(".update or .zip was not found on line, exiting")
+					fmt.Println(err)
+					fmt.Println(".update or .zip was not found on line, exiting")
+					os.Exit(0)
 				}
 
-				clientInfo := line[start:end]
+				clientInfo = line[start:end]
+				splitClientInfo = strings.Split(clientInfo, "/")
 
-				URL := cdn + clientInfo + ".zip"
-				splitClientInfo := strings.Split(clientInfo, "/")
+				URL = cdn + clientInfo + ".zip"
 
-				guidSplit := strings.Split(splitClientInfo[4], "_")
-				GUID := guidSplit[1]
+				guidSplit = strings.Split(splitClientInfo[4], "_")
+				GUID = guidSplit[1]
 
-				var Version string
-				var versionSplit []string
 				if strings.Contains(splitClientInfo[5], "-") {
 					versionSplit = strings.Split(splitClientInfo[5], "-")
 					Version = versionSplit[1]
@@ -82,15 +92,14 @@ func main() {
 					Version = zipCut
 				}
 
-				fmt.Println(fmt.Sprintf(`
-Version: %s
-GUID: %s
-Download Link: %s`, Version, GUID, URL))
+				fmt.Println("Version:", Version, "GUID:", GUID)
+				fmt.Println("Download Link:", URL)
+				fmt.Println()
 			}
 		}
 	}
 
-	fmt.Print("\n\nPress Enter to exit...")
+	fmt.Println("Press Enter to exit...")
 	_, err = fmt.Scanln()
 	if err != nil {
 		return
