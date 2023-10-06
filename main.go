@@ -35,10 +35,6 @@ func main() {
 	}
 
 	var fileName, filePath string
-	var start, end int
-
-	var clientInfo, URL, GUID, Version string
-	var versionSplit, guidSplit, splitClientInfo []string
 
 	fmt.Println("--------------------")
 	fmt.Println("Detected 'Game Versions' on your machine:")
@@ -52,51 +48,20 @@ func main() {
 		}
 		filePath = filepath.Join(logDirectory, fileName)
 
-		data, err := readLines(filePath)
+		line, err := readLines(filePath, "(DWN1) The file", "has a size of")
 		if err != nil {
-			fmt.Println(err)
-			fmt.Println("Error in splitting file into []string, exiting!")
-			os.Exit(0)
+			continue
+			//fmt.Println(err)
+			//continue
 		}
 
-		for _, line := range data {
-			if strings.Contains(line, "Starting download") {
-
-				start = strings.Index(line, "/client")
-
-				if strings.Contains(line, ".update") {
-					end = strings.Index(line, ".update")
-				} else if strings.Contains(line, ".zip") {
-					end = strings.Index(line, ".zip")
-				} else {
-					fmt.Println(err)
-					fmt.Println(".update or .zip was not found on line, exiting")
-					os.Exit(0)
-				}
-
-				clientInfo = line[start:end]
-				splitClientInfo = strings.Split(clientInfo, "/")
-
-				URL = cdn + clientInfo + ".zip"
-
-				guidSplit = strings.Split(splitClientInfo[4], "_")
-				GUID = guidSplit[1]
-
-				if strings.Contains(splitClientInfo[5], "-") {
-					versionSplit = strings.Split(splitClientInfo[5], "-")
-					Version = versionSplit[1]
-				} else {
-					clientCut, _ := strings.CutPrefix(splitClientInfo[5], "Client.")
-					zipCut, _ := strings.CutSuffix(clientCut, ".zip")
-
-					Version = zipCut
-				}
-
-				fmt.Println("Version:", Version, "GUID:", GUID)
-				fmt.Println("Download Link:", URL)
-				fmt.Println()
-			}
+		Version, GUID, URL, FileSize := extractInfo(line)
+		if Version != "" && GUID != "" && URL != "" {
+			fmt.Println("Version:", Version, "GUID:", GUID, FileSize)
+			fmt.Println("Download Link:", URL)
+			fmt.Println()
 		}
+
 	}
 
 	fmt.Println("Press Enter to exit...")
@@ -106,21 +71,64 @@ func main() {
 	}
 }
 
-func readLines(filename string) ([]string, error) {
+func extractInfo(line string) (string, string, string, string) {
+	var isUpdate bool
+	var clientInfo string
+	if strings.Contains(line, ".update") {
+		isUpdate = true
+		clientInfo = line[strings.Index(line, "/client"):strings.Index(line, ".update")]
+	} else if strings.Contains(line, ".zip") {
+		clientInfo = line[strings.Index(line, "/client"):strings.Index(line, ".zip")]
+	} else {
+		fmt.Println(".update or .zip was not found on line, exiting")
+		fmt.Println()
+		os.Exit(0)
+	}
+
+	var splitClientInfo = strings.Split(clientInfo, "/")
+
+	var URL string
+	if isUpdate {
+		URL = cdn + clientInfo + ".update"
+	} else {
+		URL = cdn + clientInfo + ".zip"
+	}
+
+	guidSplit := strings.Split(splitClientInfo[4], "_")
+
+	return guidSplit[0], guidSplit[1], URL, "FileSize: " + line[strings.Index(line, "size of")+8:]
+}
+
+const capacity = 1024
+const errorSubstring = "Substrings '%s' and '%s' not found in file '%s'"
+
+var buffer = make([]string, 0, capacity)
+
+func readLines(filename string, firstSubstring string, secondSubstring string) (string, error) {
+	buffer = buffer[0:]
+
 	file, err := os.Open(filename)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(0)
+		}
+	}(file)
 
-	var lines []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
+		line := scanner.Text()
+		if strings.Contains(line, firstSubstring) && strings.Contains(line, secondSubstring) {
+			return line, nil
+		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return "", err
 	}
 
-	return lines, nil
+	return "", fmt.Errorf(errorSubstring, firstSubstring, secondSubstring, filename)
 }
