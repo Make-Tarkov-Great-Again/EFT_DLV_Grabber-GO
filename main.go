@@ -10,6 +10,13 @@ import (
 
 const cdn string = "http://cdn-11.eft-store.com"
 
+type eftDLV struct {
+	Version string
+	GUID    string
+	Size    string
+	URL     string
+}
+
 func main() {
 	logDirectory := filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local", "Battlestate Games", "BsgLauncher", "Logs")
 	_, err := os.Stat(logDirectory)
@@ -51,17 +58,16 @@ func main() {
 		line, err := readLines(filePath, "(DWN1) The file", "has a size of")
 		if err != nil {
 			continue
-			//fmt.Println(err)
-			//continue
 		}
 
-		Version, GUID, URL, FileSize := extractInfo(line)
-		if Version != "" && GUID != "" && URL != "" {
-			fmt.Println("Version:", Version, "GUID:", GUID, FileSize)
-			fmt.Println("Download Link:", URL)
-			fmt.Println()
+		dlvData := extractInfo(line)
+		for _, dlv := range dlvData {
+			if dlv.Version != "" && dlv.GUID != "" && dlv.URL != "" {
+				fmt.Println("Version:", dlv.Version, "GUID:", dlv.GUID, "FileSize:", dlv.Size)
+				fmt.Println("Download Link:", dlv.URL)
+				fmt.Println()
+			}
 		}
-
 	}
 
 	fmt.Println("Press Enter to exit...")
@@ -71,9 +77,11 @@ func main() {
 	}
 }
 
-func extractInfo(line string) (string, string, string, string) {
+func extractInfo(line string) []eftDLV {
 	var isUpdate bool
 	var clientInfo string
+
+	output := make([]eftDLV, 0)
 	if strings.Contains(line, ".update") {
 		isUpdate = true
 		clientInfo = line[strings.Index(line, "/client"):strings.Index(line, ".update")]
@@ -86,23 +94,44 @@ func extractInfo(line string) (string, string, string, string) {
 	}
 
 	var splitClientInfo = strings.Split(clientInfo, "/")
-
-	var URL string
-	if isUpdate {
-		URL = cdn + clientInfo + ".update"
-	} else {
-		URL = cdn + clientInfo + ".zip"
-	}
-
 	guidSplit := strings.Split(splitClientInfo[4], "_")
 
-	return guidSplit[0], guidSplit[1], URL, "FileSize: " + line[strings.Index(line, "size of")+8:]
+	if isUpdate {
+		versionSplit := strings.Split(guidSplit[0], "-")[1]
+		updateURL := cdn + clientInfo + ".update"
+		update := eftDLV{
+			Version: guidSplit[0],
+			GUID:    guidSplit[1],
+			URL:     updateURL,
+			Size:    line[strings.Index(line, "size of")+8:],
+		}
+
+		zipURL := cdn + "/" + splitClientInfo[1] + "/" + splitClientInfo[2] + "/distribs/" + versionSplit + "_" + guidSplit[1] + "/Client." + versionSplit + ".zip"
+		zip := eftDLV{
+			Version: versionSplit,
+			GUID:    guidSplit[1],
+			URL:     zipURL,
+			Size:    "Unknown",
+		}
+
+		output = append(output, update, zip)
+		return output
+	} else {
+		output = append(output, eftDLV{
+			Version: guidSplit[0],
+			GUID:    guidSplit[1],
+			URL:     cdn + clientInfo + ".zip",
+			Size:    line[strings.Index(line, "size of")+8:],
+		})
+		return output
+	}
+
+	return output
 }
 
-const capacity = 1024
 const errorSubstring = "Substrings '%s' and '%s' not found in file '%s'"
 
-var buffer = make([]string, 0, capacity)
+var buffer = make([]string, 0, 1024)
 
 func readLines(filename string, firstSubstring string, secondSubstring string) (string, error) {
 	buffer = buffer[0:]
