@@ -60,13 +60,14 @@ func main() {
 			continue
 		}
 
-		dlvData := extractInfo(line)
-		for _, dlv := range dlvData {
-			if dlv.Version != "" && dlv.GUID != "" && dlv.URL != "" {
-				fmt.Println("Version:", dlv.Version, "GUID:", dlv.GUID, "FileSize:", dlv.Size)
-				fmt.Println("Download Link:", dlv.URL)
-				fmt.Println()
-			}
+		extractInfo(line)
+	}
+
+	for _, dlv := range output {
+		if dlv.Version != "" && dlv.GUID != "" && dlv.URL != "" {
+			fmt.Println("Version:", dlv.Version, "GUID:", dlv.GUID, "FileSize:", dlv.Size)
+			fmt.Println("Download Link:", dlv.URL)
+			fmt.Println()
 		}
 	}
 
@@ -77,11 +78,12 @@ func main() {
 	}
 }
 
-func extractInfo(line string) []eftDLV {
+var output = make(map[string]eftDLV)
+
+func extractInfo(line string) {
 	var isUpdate bool
 	var clientInfo string
 
-	output := make([]eftDLV, 0)
 	if strings.Contains(line, ".update") {
 		isUpdate = true
 		clientInfo = line[strings.Index(line, "/client"):strings.Index(line, ".update")]
@@ -99,7 +101,7 @@ func extractInfo(line string) []eftDLV {
 	if isUpdate {
 		versionSplit := strings.Split(guidSplit[0], "-")[1]
 		updateURL := cdn + clientInfo + ".update"
-		update := eftDLV{
+		output[guidSplit[0]] = eftDLV{
 			Version: guidSplit[0],
 			GUID:    guidSplit[1],
 			URL:     updateURL,
@@ -107,26 +109,20 @@ func extractInfo(line string) []eftDLV {
 		}
 
 		zipURL := cdn + "/" + splitClientInfo[1] + "/" + splitClientInfo[2] + "/distribs/" + versionSplit + "_" + guidSplit[1] + "/Client." + versionSplit + ".zip"
-		zip := eftDLV{
+		output[versionSplit] = eftDLV{
 			Version: versionSplit,
 			GUID:    guidSplit[1],
 			URL:     zipURL,
 			Size:    "Unknown",
 		}
-
-		output = append(output, update, zip)
-		return output
 	} else {
-		output = append(output, eftDLV{
+		output[guidSplit[0]] = eftDLV{
 			Version: guidSplit[0],
 			GUID:    guidSplit[1],
 			URL:     cdn + clientInfo + ".zip",
 			Size:    line[strings.Index(line, "size of")+8:],
-		})
-		return output
+		}
 	}
-
-	return output
 }
 
 const errorSubstring = "Substrings '%s' and '%s' not found in file '%s'"
