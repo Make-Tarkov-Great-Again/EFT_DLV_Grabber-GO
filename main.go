@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -55,13 +56,19 @@ func main() {
 		}
 		filePath = filepath.Join(logDirectory, fileName)
 
-		line, err := readLines(filePath, "(DWN1) The file", "has a size of")
-		if err != nil {
+		lines := readLines(filePath, "(DWN1) The file", "has a size of")
+		if len(lines) == 0 {
 			continue
 		}
 
-		extractInfo(line)
+		for _, line := range lines {
+			extractInfo(line)
+		}
 	}
+
+	sort.Slice(output, func(i, j int) bool {
+		return output[i].Version < output[j].Version
+	})
 
 	for _, dlv := range output {
 		if dlv.Version != "" && dlv.GUID != "" && dlv.URL != "" {
@@ -78,50 +85,64 @@ func main() {
 	}
 }
 
-var output = make(map[string]eftDLV)
+var output = make([]eftDLV, 0)
 
 func extractInfo(line string) {
 	var isUpdate bool
 	var clientInfo string
 
+	var filepathSplit = "/client"
+	var guidSplit []string
+
+	if strings.Contains(line, "/eft/client") {
+		filepathSplit = "/eft"
+	}
+
 	if strings.Contains(line, ".update") {
 		isUpdate = true
-		clientInfo = line[strings.Index(line, "/client"):strings.Index(line, ".update")]
+		clientInfo = line[strings.Index(line, filepathSplit):strings.Index(line, ".update")]
 	} else if strings.Contains(line, ".zip") {
-		clientInfo = line[strings.Index(line, "/client"):strings.Index(line, ".zip")]
+		clientInfo = line[strings.Index(line, filepathSplit):strings.Index(line, ".zip")]
 	} else {
 		fmt.Println(".update or .zip was not found on line, exiting")
 		fmt.Println()
 		os.Exit(0)
 	}
 
-	var splitClientInfo = strings.Split(clientInfo, "/")
-	guidSplit := strings.Split(splitClientInfo[4], "_")
+	splitClientInfo := strings.Split(clientInfo, "/")
+
+	if filepathSplit == "/eft" {
+		guidSplit = strings.Split(splitClientInfo[5], "_")
+	} else {
+		guidSplit = strings.Split(splitClientInfo[4], "_")
+	}
 
 	if isUpdate {
-		versionSplit := strings.Split(guidSplit[0], "-")[1]
 		updateURL := cdn + clientInfo + ".update"
-		output[guidSplit[0]] = eftDLV{
+		output = append(output, eftDLV{
 			Version: guidSplit[0],
 			GUID:    guidSplit[1],
 			URL:     updateURL,
 			Size:    line[strings.Index(line, "size of")+8:],
-		}
+		})
 
-		zipURL := cdn + "/" + splitClientInfo[1] + "/" + splitClientInfo[2] + "/distribs/" + versionSplit + "_" + guidSplit[1] + "/Client." + versionSplit + ".zip"
-		output[versionSplit] = eftDLV{
-			Version: versionSplit,
-			GUID:    guidSplit[1],
-			URL:     zipURL,
-			Size:    "Unknown",
+		if filepathSplit == "/client" {
+			versionSplit := strings.Split(guidSplit[0], "-")[1]
+			zipURL := cdn + "/" + splitClientInfo[1] + "/" + splitClientInfo[2] + "/distribs/" + versionSplit + "_" + guidSplit[1] + "/Client." + versionSplit + ".zip"
+			output = append(output, eftDLV{
+				Version: versionSplit,
+				GUID:    guidSplit[1],
+				URL:     zipURL,
+				Size:    "Unknown",
+			})
 		}
 	} else {
-		output[guidSplit[0]] = eftDLV{
+		output = append(output, eftDLV{
 			Version: guidSplit[0],
 			GUID:    guidSplit[1],
 			URL:     cdn + clientInfo + ".zip",
 			Size:    line[strings.Index(line, "size of")+8:],
-		}
+		})
 	}
 }
 
@@ -129,12 +150,13 @@ const errorSubstring = "Substrings '%s' and '%s' not found in file '%s'"
 
 var buffer = make([]string, 0, 1024)
 
-func readLines(filename string, firstSubstring string, secondSubstring string) (string, error) {
+func readLines(filename string, firstSubstring string, secondSubstring string) []string {
 	buffer = buffer[0:]
 
+	output := make([]string, 0)
 	file, err := os.Open(filename)
 	if err != nil {
-		return "", err
+		return output
 	}
 	defer func(file *os.File) {
 		err := file.Close()
@@ -148,12 +170,12 @@ func readLines(filename string, firstSubstring string, secondSubstring string) (
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, firstSubstring) && strings.Contains(line, secondSubstring) {
-			return line, nil
+			output = append(output, line)
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return "", err
+		return output
 	}
 
-	return "", fmt.Errorf(errorSubstring, firstSubstring, secondSubstring, filename)
+	return output
 }
