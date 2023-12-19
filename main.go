@@ -86,6 +86,7 @@ func main() {
 }
 
 var output = make([]eftDLV, 0)
+var duplicates = make(map[string]struct{})
 
 func extractInfo(line string) {
 	var isUpdate bool
@@ -94,7 +95,9 @@ func extractInfo(line string) {
 	var filepathSplit = "/client"
 	var guidSplit []string
 
-	if strings.Contains(line, "/eft/client") {
+	if strings.Contains(line, "/arena/client") {
+		filepathSplit = "/arena"
+	} else if strings.Contains(line, "/eft/client") {
 		filepathSplit = "/eft"
 	}
 
@@ -111,7 +114,7 @@ func extractInfo(line string) {
 
 	splitClientInfo := strings.Split(clientInfo, "/")
 
-	if filepathSplit == "/eft" {
+	if filepathSplit == "/eft" || filepathSplit == "/arena" {
 		guidSplit = strings.Split(splitClientInfo[5], "_")
 	} else {
 		guidSplit = strings.Split(splitClientInfo[4], "_")
@@ -119,15 +122,24 @@ func extractInfo(line string) {
 
 	if isUpdate {
 		updateURL := cdn + clientInfo + ".update"
+		if _, ok := duplicates[guidSplit[0]]; ok {
+			return
+		}
+
 		output = append(output, eftDLV{
 			Version: guidSplit[0],
 			GUID:    guidSplit[1],
 			URL:     updateURL,
 			Size:    line[strings.Index(line, "size of")+8:],
 		})
+		duplicates[guidSplit[0]] = struct{}{}
 
 		if filepathSplit == "/client" {
 			versionSplit := strings.Split(guidSplit[0], "-")[1]
+			if _, ok := duplicates[versionSplit]; ok {
+				return
+			}
+
 			zipURL := cdn + "/" + splitClientInfo[1] + "/" + splitClientInfo[2] + "/distribs/" + versionSplit + "_" + guidSplit[1] + "/Client." + versionSplit + ".zip"
 			output = append(output, eftDLV{
 				Version: versionSplit,
@@ -135,14 +147,20 @@ func extractInfo(line string) {
 				URL:     zipURL,
 				Size:    "Unknown",
 			})
+			duplicates[versionSplit] = struct{}{}
 		}
 	} else {
+		if _, ok := duplicates[guidSplit[0]]; ok {
+			return
+		}
+
 		output = append(output, eftDLV{
 			Version: guidSplit[0],
 			GUID:    guidSplit[1],
 			URL:     cdn + clientInfo + ".zip",
 			Size:    line[strings.Index(line, "size of")+8:],
 		})
+		duplicates[guidSplit[0]] = struct{}{}
 	}
 }
 
