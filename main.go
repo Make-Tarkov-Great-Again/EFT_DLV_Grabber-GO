@@ -12,10 +12,17 @@ import (
 const cdn string = "http://cdn-11.eft-store.com"
 
 type eftDLV struct {
-	Version string
-	GUID    string
-	Size    string
-	URL     string
+	GameType string
+	Version  string
+	GUID     string
+	Size     string
+	URL      string
+}
+
+var categories = map[string][]eftDLV{
+	"EFT":   make([]eftDLV, 0),
+	"ETS":   make([]eftDLV, 0),
+	"ARENA": make([]eftDLV, 0),
 }
 
 func main() {
@@ -66,17 +73,30 @@ func main() {
 		}
 	}
 
-	sort.Slice(output, func(i, j int) bool {
-		return output[i].Version < output[j].Version
-	})
-
-	for _, dlv := range output {
-		if dlv.Version != "" && dlv.GUID != "" && dlv.URL != "" {
-			fmt.Println("Version:", dlv.Version, "GUID:", dlv.GUID, "FileSize:", dlv.Size)
-			fmt.Println("Download Link:", dlv.URL)
-			fmt.Println()
+	for name, category := range categories {
+		sort.SliceStable(category, func(i, j int) bool {
+			return category[i].Version < category[j].Version
+		})
+		fmt.Println("[", name, "]")
+		for _, dlv := range category {
+			if dlv.Version != "" && dlv.GUID != "" && dlv.URL != "" {
+				fmt.Println("Version:", dlv.Version, "GUID:", dlv.GUID, "FileSize:", dlv.Size)
+				fmt.Println("Download Link:", dlv.URL)
+				fmt.Println()
+			}
 		}
 	}
+
+	//for name, category := range categories {
+	//	fmt.Println("[", name, "]")
+	//	for _, dlv := range category {
+	//		if dlv.Version != "" && dlv.GUID != "" && dlv.URL != "" {
+	//			fmt.Println("Version:", dlv.Version, "GUID:", dlv.GUID, "FileSize:", dlv.Size)
+	//			fmt.Println("Download Link:", dlv.URL)
+	//			fmt.Println()
+	//		}
+	//	}
+	//}
 
 	fmt.Println("Press Enter to exit...")
 	_, err = fmt.Scanln()
@@ -85,19 +105,26 @@ func main() {
 	}
 }
 
-var output = make([]eftDLV, 0)
+// var output = make([]eftDLV, 0)
 var duplicates = make(map[string]struct{})
 
 func extractInfo(line string) {
 	var isUpdate bool
 	var clientInfo string
+	var gameType string
 
 	var filepathSplit = "/client"
 	var guidSplit []string
 
 	if strings.Contains(line, "/arena/client") {
+		gameType = "ARENA"
 		filepathSplit = "/arena"
 	} else if strings.Contains(line, "/eft/client") {
+		if strings.Contains(line, "ets") {
+			gameType = "ETS"
+		} else {
+			gameType = "EFT"
+		}
 		filepathSplit = "/eft"
 	}
 
@@ -126,11 +153,12 @@ func extractInfo(line string) {
 			return
 		}
 
-		output = append(output, eftDLV{
-			Version: guidSplit[0],
-			GUID:    guidSplit[1],
-			URL:     updateURL,
-			Size:    line[strings.Index(line, "size of")+8:],
+		categories[gameType] = append(categories[gameType], eftDLV{
+			GameType: gameType,
+			Version:  guidSplit[0],
+			GUID:     guidSplit[1],
+			URL:      updateURL,
+			Size:     line[strings.Index(line, "size of")+8:],
 		})
 		duplicates[guidSplit[0]] = struct{}{}
 
@@ -141,11 +169,12 @@ func extractInfo(line string) {
 			}
 
 			zipURL := cdn + "/" + splitClientInfo[1] + "/" + splitClientInfo[2] + "/distribs/" + versionSplit + "_" + guidSplit[1] + "/Client." + versionSplit + ".zip"
-			output = append(output, eftDLV{
-				Version: versionSplit,
-				GUID:    guidSplit[1],
-				URL:     zipURL,
-				Size:    "Unknown",
+			categories[gameType] = append(categories[gameType], eftDLV{
+				GameType: gameType,
+				Version:  versionSplit,
+				GUID:     guidSplit[1],
+				URL:      zipURL,
+				Size:     "Unknown",
 			})
 			duplicates[versionSplit] = struct{}{}
 		}
@@ -154,11 +183,12 @@ func extractInfo(line string) {
 			return
 		}
 
-		output = append(output, eftDLV{
-			Version: guidSplit[0],
-			GUID:    guidSplit[1],
-			URL:     cdn + clientInfo + ".zip",
-			Size:    line[strings.Index(line, "size of")+8:],
+		categories[gameType] = append(categories[gameType], eftDLV{
+			GameType: gameType,
+			Version:  guidSplit[0],
+			GUID:     guidSplit[1],
+			URL:      cdn + clientInfo + ".zip",
+			Size:     line[strings.Index(line, "size of")+8:],
 		})
 		duplicates[guidSplit[0]] = struct{}{}
 	}
